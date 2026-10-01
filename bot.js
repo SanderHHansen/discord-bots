@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, Events } from "discord.js";
-import { DEFAULT_VARIATION_HINTS } from "./bots.js";
+import { DEFAULT_VARIATION_HINTS, KNOWN_USERS } from "./bots.js";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
@@ -22,6 +22,13 @@ function startLlmBot(config) {
   const model = config.model || "openai/gpt-oss-20b";
   const hints = config.variationHints?.length ? config.variationHints : DEFAULT_VARIATION_HINTS;
   const prefix = config.prefix.toLowerCase();
+  const includeAuthor = config.includeAuthor ?? true;
+  const knownUsers = KNOWN_USERS.length
+    ? `Known Discord users (messages are prefixed with the sender's username):\n${KNOWN_USERS.map(
+        (u) => `- "${u.username}" is ${u.realName}.`,
+      ).join("\n")}`
+    : "";
+  const systemContent = [config.systemPrompt, knownUsers].filter(Boolean).join("\n\n");
 
   const client = new Client({
     intents: [
@@ -68,7 +75,8 @@ function startLlmBot(config) {
     try {
       await message.channel.sendTyping();
       const history = await buildHistory(message.channel, message.id, config.historyLimit);
-      const answer = await ask(question, history);
+      const prompt = includeAuthor ? `${message.author.username}: ${question}` : question;
+      const answer = await ask(prompt, history);
       await message.reply(answer);
     } catch (err) {
       console.error(`[${config.name}] Feil:`, err);
@@ -84,9 +92,10 @@ function startLlmBot(config) {
       for (const m of ordered) {
         const text = m.content?.trim();
         if (!text) continue;
+        const isSelf = m.author.id === client.user.id;
         history.push({
-          role: m.author.id === client.user.id ? "assistant" : "user",
-          content: text.slice(0, 400),
+          role: isSelf ? "assistant" : "user",
+          content: (includeAuthor && !isSelf ? `${m.author.username}: ` : "") + text.slice(0, 400),
         });
       }
       return history.slice(-limit);
@@ -103,7 +112,7 @@ function startLlmBot(config) {
       temperature: 1,
       max_tokens: 300,
       messages: [
-        { role: "system", content: config.systemPrompt },
+        { role: "system", content: systemContent },
         { role: "system", content: `Variasjon for akkurat dette svaret: ${hint} Se alltid på de siste meldingene i samtalen og svar annerledes enn de forrige svarene dine. Ikke gjenta ord, fraser eller oppramsinger fra tidligere svar.` },
         ...history,
         { role: "user", content: question },

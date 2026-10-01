@@ -53,6 +53,10 @@ npm start
 
 Boter uten token i `.env` hoppes bare over med en advarsel.
 
+## Kjente Discord-brukere
+
+`KNOWN_USERS` i `bots.js` deles av alle LLM-botene, slik at de vet hvem de ulike brukernavnene er (f.eks. `cake10` = Sander). Alle meldinger prefikses med avsenderens brukernavn, så botene ser hvem som skriver. Personlige forhold (hvem en bot liker/misliker) ligger i den enkelte bots `systemPrompt`.
+
 ## Legge til en ny bot
 
 Legg til en ny oppføring i `bots.js`:
