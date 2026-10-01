@@ -67,7 +67,7 @@ function startLlmBot(config) {
 
     try {
       await message.channel.sendTyping();
-      const history = await buildHistory(message.channel, message.id);
+      const history = await buildHistory(message.channel, message.id, config.historyLimit);
       const answer = await ask(question, history);
       await message.reply(answer);
     } catch (err) {
@@ -78,7 +78,7 @@ function startLlmBot(config) {
 
   async function buildHistory(channel, currentId, limit = 10) {
     try {
-      const fetched = await channel.messages.fetch({ limit: 20, before: currentId });
+      const fetched = await channel.messages.fetch({ limit: Math.max(limit * 3, 30), before: currentId });
       const ordered = [...fetched.values()].reverse();
       const history = [];
       for (const m of ordered) {
