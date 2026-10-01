@@ -29,6 +29,7 @@ function startLlmBot(config) {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
     ],
+    presence: { status: config.status || "online" },
   });
 
   client.once(Events.ClientReady, (c) => {
@@ -157,6 +158,7 @@ function startRoleReactBot(config) {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
     ],
+    presence: { status: config.status || "online" },
   });
 
   client.once(Events.ClientReady, (c) => {

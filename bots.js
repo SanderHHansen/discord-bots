@@ -50,5 +50,6 @@ Regler du ALLTID skal følge:
     roleName: "Scamvengers",
     reaction: "❤️",
     reply: "jeg joiner",
+    status: "invisible",
   },
 ];
