@@ -53,6 +53,16 @@ npm start
 
 Boter uten token i `.env` hoppes bare over med en advarsel.
 
+## Daglig auto-innlegg
+
+AkuBot kan poste en konspirasjonsteori helt av seg selv én gang i døgnet. Sett `dailyPost` på boten i `bots.js`:
+
+```js
+dailyPost: { channelName: "akuchannel", minHour: 9, maxHour: 23 },
+```
+
+Boten velger et tilfeldig klokkeslett innenfor `minHour`–`maxHour` hver dag (ulikt fra dagen før) og poster i kanalen med det navnet. Kanalen må være synlig for boten. Fjern `dailyPost` for å skru det av.
+
 ## Kjente Discord-brukere
 
 `KNOWN_USERS` i `bots.js` deles av alle LLM-botene, slik at de vet hvem de ulike brukernavnene er (f.eks. `cake10` = Sander). Alle meldinger prefikses med avsenderens brukernavn, så botene ser hvem som skriver. Personlige forhold (hvem en bot liker/misliker) ligger i den enkelte bots `systemPrompt`.

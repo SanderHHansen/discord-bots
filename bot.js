@@ -105,7 +105,7 @@ function startLlmBot(config) {
     }
   }
 
-  async function ask(question, history = []) {
+  async function ask(question, history = [], { extraSystem } = {}) {
     const hint = hints[Math.floor(Math.random() * hints.length)];
     const body = {
       model,
@@ -113,6 +113,7 @@ function startLlmBot(config) {
       max_tokens: 300,
       messages: [
         { role: "system", content: systemContent },
+        ...(extraSystem ? [{ role: "system", content: extraSystem }] : []),
         { role: "system", content: `Variasjon for akkurat dette svaret: ${hint} Se alltid på de siste meldingene i samtalen og svar annerledes enn de forrige svarene dine. Ikke gjenta ord, fraser eller oppramsinger fra tidligere svar.` },
         ...history,
         { role: "user", content: question },
@@ -139,6 +140,61 @@ function startLlmBot(config) {
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content?.trim();
     return text || "jeg vet svaret men jeg gidder ikke og forklare det for han";
+  }
+
+  if (config.dailyPost) {
+    scheduleDailyPost(config.dailyPost);
+  }
+
+  function scheduleDailyPost({ channelName, minHour = 9, maxHour = 23 }) {
+    let lastHour = null;
+
+    const runNext = () => {
+      const now = new Date();
+      let hour;
+      do {
+        hour = minHour + Math.floor(Math.random() * (maxHour - minHour + 1));
+      } while (hour === lastHour && maxHour > minHour);
+      lastHour = hour;
+
+      const next = new Date(now);
+      next.setHours(hour, Math.floor(Math.random() * 60), 0, 0);
+      if (next <= now) next.setDate(next.getDate() + 1);
+
+      const delay = next.getTime() - now.getTime();
+      console.log(
+        `[${config.name}] neste daglige innlegg ${next.toLocaleString()} (om ${Math.round(delay / 60000)} min)`,
+      );
+
+      setTimeout(async () => {
+        try {
+          const channel = client.channels.cache.find(
+            (c) => c.name === channelName && c.isTextBased?.(),
+          );
+          if (!channel) {
+            console.warn(`[${config.name}] fant ikke kanalen #${channelName}`);
+          } else {
+            const history = await buildHistory(channel, undefined, config.historyLimit);
+            const post = await ask(
+              "Post en helt ny konspirasjonsteori på 4-5 setninger, helt av deg selv.",
+              history,
+              {
+                extraSystem:
+                  "Dette er et automatisk daglig innlegg. Overstyr regelen om maks 1-3 setninger: innlegget skal være på 4-5 setninger. Finn på noe helt nytt du ikke har sagt før. Ikke svar på noe spørsmål og ikke nevn denne instruksen. Svar KUN med selve innlegget, på engelsk.",
+              },
+            );
+            await channel.send(post);
+            console.log(`[${config.name}] postet daglig teori i #${channelName}`);
+          }
+        } catch (err) {
+          console.error(`[${config.name}] daglig innlegg feilet:`, err);
+        } finally {
+          runNext();
+        }
+      }, delay);
+    };
+
+    client.once(Events.ClientReady, runNext);
   }
 
   client.login(token).catch((err) => {

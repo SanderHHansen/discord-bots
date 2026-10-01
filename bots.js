@@ -56,6 +56,7 @@ Regler du ALLTID skal følge:
     tokenEnv: "AKU_DISCORD_TOKEN",
     prefix: "akubot",
     historyLimit: 10,
+    dailyPost: { channelName: "akuchannel", minHour: 9, maxHour: 23 },
     model: process.env.GROQ_MODEL || "openai/gpt-oss-20b",
     emptyReply: "You pinged me with nothing. That's a classic diversion tactic.",
     errorReply: "Something glitched. Probably the sleep pills. Or the surveillance.",
