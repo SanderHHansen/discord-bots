@@ -53,15 +53,21 @@ npm start
 
 Boter uten token i `.env` hoppes bare over med en advarsel.
 
-## Daglig auto-innlegg
+## Automatiske innlegg
 
-AkuBot kan poste en konspirasjonsteori helt av seg selv én gang i døgnet. Sett `dailyPost` på boten i `bots.js`:
+AkuBot kan poste en konspirasjonsteori helt av seg selv noen ganger i uken. Sett `scheduledPost` på boten i `bots.js`:
 
 ```js
-dailyPost: { channelName: "akuchannel", minHour: 9, maxHour: 23 },
+scheduledPost: {
+  channelName: "akuchannel",
+  minHour: 2,
+  maxHour: 6,
+  postsPerWeek: 2,
+  timeZone: "Europe/Oslo",
+},
 ```
 
-Boten velger et tilfeldig klokkeslett innenfor `minHour`–`maxHour` hver dag (ulikt fra dagen før) og poster i kanalen med det navnet. Kanalen må være synlig for boten. Fjern `dailyPost` for å skru det av.
+Boten velger tilfeldige dager og klokkeslett innenfor `minHour`–`maxHour` (i `timeZone`) og poster `postsPerWeek` ganger per uke. Kanalen må være synlig for boten. Fjern `scheduledPost` for å skru det av.
 
 ## Kjente Discord-brukere
 
@@ -71,8 +77,10 @@ Boten velger et tilfeldig klokkeslett innenfor `minHour`–`maxHour` hver dag (u
 
 Legg til en ny oppføring i `bots.js`:
 
-- `mode: "llm"` – som OmarBot: krever `name`, `tokenEnv`, `prefix`, `systemPrompt` og valgfritt `model` / `variationHints`.
+- `mode: "llm"` – som OmarBot: krever `name`, `tokenEnv`, `prefix`, `systemPrompt` og valgfritt `model` / `variationHints` / `norwegianChance`.
 - `mode: "roleReact"` – som KennyBot: krever `name`, `tokenEnv`, `roleName`, `reaction`, `reply`.
+
+`norwegianChance` (0–1) lar en bot som normalt svarer på et annet språk av og til svare på norsk bokmål i stedet. AkuBot bruker `0.1`, altså ca. 1 av 10 svar.
 
 Legg så til token-variabelen i `.env`.
 

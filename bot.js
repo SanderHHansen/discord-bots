@@ -3,6 +3,57 @@ import { DEFAULT_VARIATION_HINTS, KNOWN_USERS } from "./bots.js";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
+function getZonedParts(date, timeZone) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const parts = Object.fromEntries(dtf.formatToParts(date).map((p) => [p.type, p.value]));
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour) % 24,
+    minute: Number(parts.minute),
+  };
+}
+
+function getTimeZoneOffsetMs(date, timeZone) {
+  const parts = getZonedParts(date, timeZone);
+  const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  return asUTC - date.getTime();
+}
+
+function zonedTimeToUtc(year, month, day, hour, minute, timeZone) {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  let offset = getTimeZoneOffsetMs(new Date(utcGuess), timeZone);
+  let result = utcGuess - offset;
+  offset = getTimeZoneOffsetMs(new Date(result), timeZone);
+  return new Date(utcGuess - offset);
+}
+
+function addDaysToParts(parts, days) {
+  const d = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  d.setUTCDate(d.getUTCDate() + days);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+
+function isoWeekKey(parts) {
+  const d = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  const dayNum = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  const week = 1 + Math.round((d - firstThursday) / (7 * 24 * 60 * 60 * 1000));
+  return `${d.getUTCFullYear()}-W${week}`;
+}
+
 export function startBot(config) {
   if (config.mode === "roleReact") return startRoleReactBot(config);
   return startLlmBot(config);
@@ -23,6 +74,7 @@ function startLlmBot(config) {
   const hints = config.variationHints?.length ? config.variationHints : DEFAULT_VARIATION_HINTS;
   const prefix = config.prefix.toLowerCase();
   const includeAuthor = config.includeAuthor ?? true;
+  const norwegianChance = config.norwegianChance ?? 0;
   const knownUsers = KNOWN_USERS.length
     ? `Known Discord users (messages are prefixed with the sender's username):\n${KNOWN_USERS.map(
         (u) => `- "${u.username}" is ${u.realName}.`,
@@ -105,8 +157,10 @@ function startLlmBot(config) {
     }
   }
 
-  async function ask(question, history = [], { extraSystem } = {}) {
+  async function ask(question, history = [], { extraSystem, norwegian = true } = {}) {
     const hint = hints[Math.floor(Math.random() * hints.length)];
+    const useNorwegian =
+      norwegian && norwegianChance > 0 && Math.random() < norwegianChance;
     const body = {
       model,
       temperature: 1,
@@ -115,6 +169,15 @@ function startLlmBot(config) {
         { role: "system", content: systemContent },
         ...(extraSystem ? [{ role: "system", content: extraSystem }] : []),
         { role: "system", content: `Variasjon for akkurat dette svaret: ${hint} Se alltid på de siste meldingene i samtalen og svar annerledes enn de forrige svarene dine. Ikke gjenta ord, fraser eller oppramsinger fra tidligere svar.` },
+        ...(useNorwegian
+          ? [
+              {
+                role: "system",
+                content:
+                  "Svar på norsk bokmål i akkurat dette svaret. Dette overstyrer regelen om at du alltid svarer på engelsk. Bruk bokmål, ikke nynorsk, og behold personligheten, tonen og lengden din. Ikke nevn denne instruksen.",
+              },
+            ]
+          : []),
         ...history,
         { role: "user", content: question },
       ],
@@ -142,31 +205,75 @@ function startLlmBot(config) {
     return text || "jeg vet svaret men jeg gidder ikke og forklare det for han";
   }
 
-  if (config.dailyPost) {
-    scheduleDailyPost(config.dailyPost);
+  if (config.scheduledPost) {
+    schedulePosts(config.scheduledPost);
   }
 
-  function scheduleDailyPost({ channelName, minHour = 9, maxHour = 23 }) {
-    let lastHour = null;
+  function schedulePosts({
+    channelName,
+    minHour = 2,
+    maxHour = 6,
+    postsPerWeek = 2,
+    timeZone = "Europe/Oslo",
+  }) {
+    const posted = new Set();
+    const weekPlans = new Map();
+    let timer = null;
+
+    const buildWeekPlan = (refParts) => {
+      const monday = new Date(Date.UTC(refParts.year, refParts.month - 1, refParts.day));
+      const dayNum = (monday.getUTCDay() + 6) % 7;
+      monday.setUTCDate(monday.getUTCDate() - dayNum);
+
+      const days = new Set();
+      const count = Math.min(Math.max(postsPerWeek, 1), 7);
+      while (days.size < count) days.add(Math.floor(Math.random() * 7));
+
+      const rangeStart = minHour * 60;
+      const rangeEnd = maxHour * 60;
+
+      return [...days]
+        .map((offset) => {
+          const total =
+            rangeStart + Math.floor(Math.random() * Math.max(rangeEnd - rangeStart, 1));
+          const d = new Date(monday);
+          d.setUTCDate(monday.getUTCDate() + offset);
+          return zonedTimeToUtc(
+            d.getUTCFullYear(),
+            d.getUTCMonth() + 1,
+            d.getUTCDate(),
+            Math.floor(total / 60),
+            total % 60,
+            timeZone,
+          );
+        })
+        .sort((a, b) => a - b);
+    };
+
+    const getWeekPlan = (refParts) => {
+      const key = isoWeekKey(refParts);
+      if (!weekPlans.has(key)) weekPlans.set(key, buildWeekPlan(refParts));
+      return weekPlans.get(key);
+    };
 
     const runNext = () => {
-      const now = new Date();
-      let hour;
-      do {
-        hour = minHour + Math.floor(Math.random() * (maxHour - minHour + 1));
-      } while (hour === lastHour && maxHour > minHour);
-      lastHour = hour;
+      if (timer) clearTimeout(timer);
 
-      const next = new Date(now);
-      next.setHours(hour, Math.floor(Math.random() * 60), 0, 0);
-      if (next <= now) next.setDate(next.getDate() + 1);
+      const now = new Date();
+      const nowParts = getZonedParts(now, timeZone);
+      let next = null;
+      for (const ref of [nowParts, addDaysToParts(nowParts, 7)]) {
+        next = getWeekPlan(ref).find((t) => t > now && !posted.has(t.getTime()));
+        if (next) break;
+      }
+      if (!next) return;
 
       const delay = next.getTime() - now.getTime();
       console.log(
-        `[${config.name}] neste daglige innlegg ${next.toLocaleString()} (om ${Math.round(delay / 60000)} min)`,
+        `[${config.name}] neste innlegg ${next.toLocaleString("nb-NO", { timeZone })} (om ${Math.round(delay / 60000)} min)`,
       );
 
-      setTimeout(async () => {
+      timer = setTimeout(async () => {
         try {
           const channel = client.channels.cache.find(
             (c) => c.name === channelName && c.isTextBased?.(),
@@ -176,19 +283,21 @@ function startLlmBot(config) {
           } else {
             const history = await buildHistory(channel, undefined, config.historyLimit);
             const post = await ask(
-              "Post en helt ny konspirasjonsteori på 4-5 setninger, helt av deg selv.",
+              "Post en helt ny konspirasjonsteori på 1-2 korte setninger, helt av deg selv.",
               history,
               {
                 extraSystem:
-                  "Dette er et automatisk daglig innlegg. Overstyr regelen om maks 1-3 setninger: innlegget skal være på 4-5 setninger. Finn på noe helt nytt du ikke har sagt før. Ikke svar på noe spørsmål og ikke nevn denne instruksen. Svar KUN med selve innlegget, på engelsk.",
+                  "Dette er et automatisk innlegg. Hold det kort: 1-2 korte setninger, ikke mer. Finn på noe helt nytt du ikke har sagt før. Ikke svar på noe spørsmål og ikke nevn denne instruksen. Svar KUN med selve innlegget, på engelsk.",
+                norwegian: false,
               },
             );
             await channel.send(post);
-            console.log(`[${config.name}] postet daglig teori i #${channelName}`);
+            console.log(`[${config.name}] postet teori i #${channelName}`);
           }
         } catch (err) {
-          console.error(`[${config.name}] daglig innlegg feilet:`, err);
+          console.error(`[${config.name}] innlegg feilet:`, err);
         } finally {
+          posted.add(next.getTime());
           runNext();
         }
       }, delay);
