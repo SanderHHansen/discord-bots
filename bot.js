@@ -214,16 +214,22 @@ function startLlmBot(config) {
     minHour = 2,
     maxHour = 6,
     postsPerWeek = 2,
+    intervalWeeks = 1,
     timeZone = "Europe/Oslo",
   }) {
     const posted = new Set();
     const weekPlans = new Map();
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const interval = Math.max(intervalWeeks, 1);
     let timer = null;
 
     const buildWeekPlan = (refParts) => {
       const monday = new Date(Date.UTC(refParts.year, refParts.month - 1, refParts.day));
       const dayNum = (monday.getUTCDay() + 6) % 7;
       monday.setUTCDate(monday.getUTCDate() - dayNum);
+
+      const weekIndex = Math.floor(monday.getTime() / WEEK_MS);
+      if (((weekIndex % interval) + interval) % interval !== 0) return [];
 
       const days = new Set();
       const count = Math.min(Math.max(postsPerWeek, 1), 7);
@@ -262,8 +268,11 @@ function startLlmBot(config) {
       const now = new Date();
       const nowParts = getZonedParts(now, timeZone);
       let next = null;
-      for (const ref of [nowParts, addDaysToParts(nowParts, 7)]) {
-        next = getWeekPlan(ref).find((t) => t > now && !posted.has(t.getTime()));
+      const lookaheadWeeks = Math.max(interval * 2, 2);
+      for (let i = 0; i < lookaheadWeeks; i++) {
+        next = getWeekPlan(addDaysToParts(nowParts, i * 7)).find(
+          (t) => t > now && !posted.has(t.getTime()),
+        );
         if (next) break;
       }
       if (!next) return;

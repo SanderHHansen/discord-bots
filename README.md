@@ -55,19 +55,20 @@ Boter uten token i `.env` hoppes bare over med en advarsel.
 
 ## Automatiske innlegg
 
-AkuBot kan poste en konspirasjonsteori helt av seg selv noen ganger i uken. Sett `scheduledPost` på boten i `bots.js`:
+AkuBot kan poste en konspirasjonsteori helt av seg selv innimellom. Sett `scheduledPost` på boten i `bots.js`:
 
 ```js
 scheduledPost: {
   channelName: "akuchannel",
   minHour: 2,
   maxHour: 6,
-  postsPerWeek: 2,
+  postsPerWeek: 1,
+  intervalWeeks: 2,
   timeZone: "Europe/Oslo",
 },
 ```
 
-Boten velger tilfeldige dager og klokkeslett innenfor `minHour`–`maxHour` (i `timeZone`) og poster `postsPerWeek` ganger per uke. Kanalen må være synlig for boten. Fjern `scheduledPost` for å skru det av.
+Boten velger tilfeldige dager og klokkeslett innenfor `minHour`–`maxHour` (i `timeZone`) og poster `postsPerWeek` ganger annenhver uke (`intervalWeeks`). Kanalen må være synlig for boten. Fjern `scheduledPost` for å skru det av.
 
 ## Kjente Discord-brukere
 
